@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: bun
+    env: docker
+    repo: https://github.com/horizoncarlo/distant-adventures-app
+    plan: individual
+    autoDeploy: false

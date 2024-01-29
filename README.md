@@ -5,10 +5,12 @@ This application can be used when running a remote / webcam / Discord session to
 
 Each player should join the same session/room, which is noted by a randomly generated 4-digit code (or a custom one can be set). Anyone in the same session can see and modify the Momentum.
 
-For more information on the game see https://horizongamesblog.wordpress.com/distant-adventures/
+For more information on the game you can find the free rules at https://horizongamesblog.wordpress.com/distant-adventures/
 
 ### Live Demo
-To see the application running visit https://distant-adventures-app.onrender.com/ or http://adventure.homelinux.com/
+To see the application running visit either:
+- https://distant-adventures-app.onrender.com/
+- http://adventure.homelinux.com/
 
 ### Setup and Running
 For simplicity the app uses Bun and serves plain HTML/JS/CSS with no dependencies. Websockets are used under the hood for pushing state between interested players.

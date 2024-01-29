@@ -2,9 +2,10 @@
   "name": "distant-adventures-app",
   "version": "0.9",
   "scripts": {
-    "build": "bun build backend/server.js --outdir ./build",
-    "watch": "bun --watch backend/server.js",
-    "hot": "bun --hot backend/server.js"
+    "build": "bun build server.js --outdir ./build",
+    "start": "bun server.js",
+    "watch": "bun --watch server.js",
+    "hot": "bun --hot server.js"
   },
   "private": true
 }

@@ -41,7 +41,7 @@ const server = Bun.serve({
     switch (new URL(req.url).pathname) {
       case '/':
         // Read our HTML page file
-        let toReturn = await Bun.file('./templates/main.html').text();
+        let toReturn = await Bun.file('./main.html').text();
         
         // Log how many sessions we have currently
         // TODO Clean up sessions based on WS status? Or time/expiry? Could track a "last active" flag? Or after a certain cap? Or a combination of all of those?

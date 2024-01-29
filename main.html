@@ -281,10 +281,10 @@
           if (res) {
             res.json().then(content => {
               if (content) {
-                setValue('playerGoal', content.playerGoal);
-                setValue('playerMomentum', content.playerMomentum);
-                setValue('opponentGoal', content.opponentGoal);
-                setValue('opponentMomentum', content.opponentMomentum);
+                setValue('playerGoal', typeof content.playerGoal === 'number' ? content.playerGoal : 0);
+                setValue('playerMomentum', typeof content.playerMomentum === 'number' ? content.playerMomentum : 0);
+                setValue('opponentGoal', typeof content.opponentGoal === 'number' ? content.opponentGoal : 0);
+                setValue('opponentMomentum', typeof content.opponentMomentum === 'number' ? content.opponentMomentum : 0);
                 calculateMomentumColors();
                 statusMessage("Joined <b>" + sessionId + "</b>");
               }

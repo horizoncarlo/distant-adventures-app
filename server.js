@@ -74,7 +74,7 @@ const server = Bun.serve({
       case '/goal':
         return handleGoalPost(req);
       case '/state':
-        return handleStateGet(req);
+        return handleStateGet(req, sessionId);
       default:
         return new Response('Not found', { status: 404 });
     }
@@ -211,7 +211,7 @@ async function handleGoalPost(req) {
   return new Response(JSON.stringify({}), { status: 500 });
 }
 
-async function handleStateGet(req) {
+async function handleStateGet(req, sessionId) {
   try{
     let workingSession = sessions[sessionId];
     if (workingSession) {

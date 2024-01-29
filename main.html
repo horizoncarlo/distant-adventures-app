@@ -11,10 +11,10 @@
   <script type="text/javascript">
     const HOSTNAME = "${HOSTNAME}";
     const PORT = "${PORT}";
-    const HOST = HOSTNAME + ":" + PORT + "/";
-    const API_MOMENTUM = "http://" + HOST + "momentum";
-    const API_GOAL = "http://" + HOST + "goal";
-    const API_STATE = "http://" + HOST + "state";
+    const HOST = HOSTNAME + (isHttps() ? "" : (":" + PORT)) + "/";
+    const API_MOMENTUM = window.location.protocol + "//" + HOST + "momentum";
+    const API_GOAL = window.location.protocol + "//" + HOST + "goal";
+    const API_STATE = window.location.protocol + "//" + HOST + "state";
     const PARAM_ID = "?id=";
     const STATUS_SHOW_LENGTH_MS = 4000;
     
@@ -50,7 +50,7 @@
       if (socket) {
         unsubscribeSession();
       }
-      socket = new WebSocket("ws://" + HOST + "ws" + PARAM_ID + sessionId);
+      socket = new WebSocket((isHttps() ? "wss": "ws") + "://" + HOST + "ws" + PARAM_ID + sessionId);
       socket.addEventListener("message", event => {
         console.log("Received Event over WS", event);
         
@@ -149,6 +149,10 @@
       if (event && event.key && event.key === 'Enter') {
         changeSession();
       }
+    }
+    
+    function isHttps() {
+      return window.location.protocol === "https:";
     }
     
     function isMobileSize() {

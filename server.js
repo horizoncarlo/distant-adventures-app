@@ -14,7 +14,7 @@ const sessions = {
   //   sessionId: { playerMomentum, playerGoal, opponentMomentum, opponentGoal }
 };
 
-const DEFAULT_HOSTNAME = Bun.env.isProduction ? 'https://distant-adventures-app.onrender.com' : 'localhost';
+const DEFAULT_HOSTNAME = Bun.env.isProduction ? 'distant-adventures-app.onrender.com' : 'localhost';
 const DEFAULT_PORT = 3000;
 
 log("Environment (isProduction=" + Bun.env.isProduction + ") and host/port: " + DEFAULT_HOSTNAME + " (" + DEFAULT_PORT + ")");

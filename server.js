@@ -17,6 +17,8 @@ const sessions = {
 const DEFAULT_HOSTNAME = Bun.env.isProduction ? 'https://distant-adventures-app.onrender.com' : 'localhost';
 const DEFAULT_PORT = 3000;
 
+log("Environment (isProduction=" + Bun.env.isProduction + ") and host/port: " + DEFAULT_HOSTNAME + " (" + DEFAULT_PORT + ")");
+
 const server = Bun.serve({
   hostname: DEFAULT_HOSTNAME,
   port: DEFAULT_PORT,
@@ -73,16 +75,7 @@ const server = Bun.serve({
       case '/goal':
         return handleGoalPost(req);
       case '/state':
-        let workingSession = sessions[sessionId];
-        if (workingSession) {
-          return new Response(JSON.stringify({
-            playerGoal: workingSession.playerGoal,
-            playerMomentum: workingSession.playerMomentum,
-            opponentGoal: workingSession.opponentGoal,
-            opponentMomentum: workingSession.opponentMomentum
-          }), { status: 200 });
-        }
-        return new Response(JSON.stringify({}), { status: 404 });
+        return handleStateGet(req);
       default:
         return new Response('Not found', { status: 404 });
     }
@@ -109,104 +102,131 @@ const server = Bun.serve({
 });
 
 async function handleMomentumPost(req) {
-  const body = await req.json();
-  log("Momentum POST in", body);
-  
-  // Determine if we have a valid Session ID to work with
-  const currentSessionId = body.sessionId;
-  if (!currentSessionId) {
-    return new Response("Session ID is required", { status: 400 });
-  }
-  const currentSession = sessions[currentSessionId];
-  if (!currentSession) {
-    return new Response("No Session was found", { status: 400 });
-  }
-  
-  // Set our other flags: isPlayer, isSet, and momentum
-  let isPlayer = body.isPlayer ? true : false;
-  let isSet = body.isSet ? true : false;
-  let momentum = 0;
-  if (typeof body.momentum === 'number') {
-    momentum = body.momentum;
-  }
-  
-  log("Momentum POST params sessionId=" + currentSessionId + " isPlayer=" + isPlayer + " isSet=" + isSet + " momentum=" + momentum);
-  
-  // We're either setting the Momentum or just add/subtract based on the current
-  if (isSet) {
-    if (isPlayer) {
-      currentSession.playerMomentum = momentum;
+  try{
+    const body = await req.json();
+    log("Momentum POST in", body);
+    
+    // Determine if we have a valid Session ID to work with
+    const currentSessionId = body.sessionId;
+    if (!currentSessionId) {
+      return new Response("Session ID is required", { status: 400 });
+    }
+    const currentSession = sessions[currentSessionId];
+    if (!currentSession) {
+      return new Response("No Session was found", { status: 400 });
+    }
+    
+    // Set our other flags: isPlayer, isSet, and momentum
+    let isPlayer = body.isPlayer ? true : false;
+    let isSet = body.isSet ? true : false;
+    let momentum = 0;
+    if (typeof body.momentum === 'number') {
+      momentum = body.momentum;
+    }
+    
+    log("Momentum POST params sessionId=" + currentSessionId + " isPlayer=" + isPlayer + " isSet=" + isSet + " momentum=" + momentum);
+    
+    // We're either setting the Momentum or just add/subtract based on the current
+    if (isSet) {
+      if (isPlayer) {
+        currentSession.playerMomentum = momentum;
+      }
+      else {
+        currentSession.opponentMomentum = momentum;
+      }
     }
     else {
-      currentSession.opponentMomentum = momentum;
+      if (isPlayer) {
+        currentSession.playerMomentum += momentum;
+      }
+      else {
+        currentSession.opponentMomentum += momentum;
+      }
     }
+    
+    // Minimum the Momentum
+    if (currentSession.playerMomentum < 0) { currentSession.playerMomentum = 0; }
+    if (currentSession.opponentMomentum < 0) { currentSession.opponentMomentum = 0; }
+    
+    const toSend = {
+      isPlayer: isPlayer,
+      newMomentum: isPlayer ? currentSession.playerMomentum : currentSession.opponentMomentum
+    };
+    
+    log("Momentum POST out", toSend);
+    
+    server.publish(SOCKET_GROUP + currentSessionId, JSON.stringify(toSend));
+    return new Response(toSend);
+  }catch (err) {
+    log("Momentum POST failed", err);
   }
-  else {
-    if (isPlayer) {
-      currentSession.playerMomentum += momentum;
-    }
-    else {
-      currentSession.opponentMomentum += momentum;
-    }
-  }
-  
-  // Minimum the Momentum
-  if (currentSession.playerMomentum < 0) { currentSession.playerMomentum = 0; }
-  if (currentSession.opponentMomentum < 0) { currentSession.opponentMomentum = 0; }
-  
-  const toSend = {
-    isPlayer: isPlayer,
-    newMomentum: isPlayer ? currentSession.playerMomentum : currentSession.opponentMomentum
-  };
-  
-  log("Momentum POST out", toSend);
-  
-  server.publish(SOCKET_GROUP + currentSessionId, JSON.stringify(toSend));
-  return new Response(toSend);
+  return new Response(JSON.stringify({}), { status: 500 });
 }
 
 async function handleGoalPost(req) {
-  const body = await req.json();
-  log("Goal POST in", body);
-  
-  // Determine if we have a valid Session ID to work with
-  const currentSessionId = body.sessionId;
-  if (!currentSessionId) {
-    return new Response("Session ID is required", { status: 400 });
+  try{
+    const body = await req.json();
+    log("Goal POST in", body);
+    
+    // Determine if we have a valid Session ID to work with
+    const currentSessionId = body.sessionId;
+    if (!currentSessionId) {
+      return new Response("Session ID is required", { status: 400 });
+    }
+    const currentSession = sessions[currentSessionId];
+    if (!currentSession) {
+      return new Response("No Session was found", { status: 400 });
+    }
+    
+    // Set our other flags: isPlayer and goal
+    let isPlayer = body.isPlayer ? true : false;
+    let goal = 0;
+    if (typeof body.goal === 'number') {
+      goal = body.goal;
+    }
+    
+    // Minimum the goal
+    if (goal < 0) { goal = 0; }
+    
+    log("Goal POST params", currentSessionId, isPlayer, goal);
+    
+    if (isPlayer) {
+      currentSession.playerGoal = goal;
+    }
+    else {
+      currentSession.opponentGoal = goal;
+    }
+    
+    const toSend = {
+      isPlayer: isPlayer,
+      newGoal: isPlayer ? currentSession.playerGoal : currentSession.opponentGoal
+    };
+    
+    log("Goal POST out", toSend);
+    
+    server.publish(SOCKET_GROUP + currentSessionId, JSON.stringify(toSend));
+    return new Response(toSend);
+  }catch (err) {
+    log("Goal POST failed", err);
   }
-  const currentSession = sessions[currentSessionId];
-  if (!currentSession) {
-    return new Response("No Session was found", { status: 400 });
+  return new Response(JSON.stringify({}), { status: 500 });
+}
+
+async function handleStateGet(req) {
+  try{
+    let workingSession = sessions[sessionId];
+    if (workingSession) {
+      return new Response(JSON.stringify({
+        playerGoal: workingSession.playerGoal,
+        playerMomentum: workingSession.playerMomentum,
+        opponentGoal: workingSession.opponentGoal,
+        opponentMomentum: workingSession.opponentMomentum
+      }), { status: 200 });
+    }
+  }catch (err) {
+    log("State GET failed", err);
   }
-  
-  // Set our other flags: isPlayer and goal
-  let isPlayer = body.isPlayer ? true : false;
-  let goal = 0;
-  if (typeof body.goal === 'number') {
-    goal = body.goal;
-  }
-  
-  // Minimum the goal
-  if (goal < 0) { goal = 0; }
-  
-  log("Goal POST params", currentSessionId, isPlayer, goal);
-  
-  if (isPlayer) {
-    currentSession.playerGoal = goal;
-  }
-  else {
-    currentSession.opponentGoal = goal;
-  }
-  
-  const toSend = {
-    isPlayer: isPlayer,
-    newGoal: isPlayer ? currentSession.playerGoal : currentSession.opponentGoal
-  };
-  
-  log("Goal POST out", toSend);
-  
-  server.publish(SOCKET_GROUP + currentSessionId, JSON.stringify(toSend));
-  return new Response(toSend);
+  return new Response(JSON.stringify({}), { status: 404 });
 }
 
 function makeNewSession(sessionId) {

@@ -20,7 +20,6 @@ const DEFAULT_PORT = 3000;
 log("Environment (isProduction=" + Bun.env.isProduction + ") and host/port: " + DEFAULT_HOSTNAME + " (" + DEFAULT_PORT + ")");
 
 const server = Bun.serve({
-  hostname: DEFAULT_HOSTNAME,
   port: DEFAULT_PORT,
   async fetch(req, server) {
     // Determine if we have an existing session

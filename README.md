@@ -7,6 +7,8 @@ Each player should join the same session/room, which is noted by a randomly gene
 
 For more information on the game see https://horizongamesblog.wordpress.com/distant-adventures/
 
+To see the application running visit https://distant-adventures-app.onrender.com/
+
 #### Setup and Running
 For simplicity the app uses Bun and serves plain HTML/JS/CSS with no dependencies. Websockets are used under the hood for pushing state between interested players.
 

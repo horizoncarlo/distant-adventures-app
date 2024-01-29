@@ -6,3 +6,6 @@ This application can be used when running a remote / webcam / Discord session to
 Each player should join the same session/room, which is noted by a randomly generated 4-digit code (or a custom one can be set). Anyone in the same session can see and modify the Momentum.
 
 For more information on the game see https://horizongamesblog.wordpress.com/distant-adventures/
+
+#### Setup and Running
+For simplicity the app uses Bun and serves plain HTML/JS/CSS. Websockets are used under the hood for pushing state between interested players.

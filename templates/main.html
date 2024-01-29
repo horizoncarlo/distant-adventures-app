@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Distant Adventures (App)</title>
+  <base href="/" />
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+  <!-- TODO Favicon of compass logo, or just straight SVG link <link rel="icon" href="./assets/favicon/favicon-32.png" sizes="32x32" /> -->
+  
+  <script type="text/javascript">
+    const HOSTNAME = "localhost";
+    const PORT = "3000";
+    const HOST = HOSTNAME + ":" + PORT + "/";
+    const API_MOMENTUM = "http://" + HOST + "momentum";
+    const API_GOAL = "http://" + HOST + "goal";
+    const API_STATE = "http://" + HOST + "state";
+    const PARAM_ID = "?id=";
+    const STATUS_SHOW_LENGTH_MS = 4000;
+    
+    let sessionId = "${SESSION_ID}"; // Anything with ${} notation is replaced automatically by the server before the page is sent to the user
+    let customExtraShow = false; // Show or hide the extra Momentum panels
+    let socket; // Declared later as a binding for our Websocket
+    let statusTimer;
+    
+    // Perform steps once the page is initialized
+    // Color our Momentum based on how close we are to the goal
+    // Mark what our session ID is in the UI, mainly for mobile where seeing the URL can be a hassle
+    window.onload = () => {
+      calculateMomentumColors();
+      
+      applySessionId(sessionId);
+    };
+    
+    // Before we unload, unsubscribe from our websocket if possible
+    window.onbeforeunload = function() {
+      unsubscribeSession();
+    };
+    
+    function toggleCustomExtra() {
+      document.getElementById('customExtraShowP' + customExtraShow).style.display = 'none';
+      document.getElementById('customExtraShowO' + customExtraShow).style.display = 'none';
+      customExtraShow = !customExtraShow;
+      document.getElementById('customExtraShowP' + customExtraShow).style.display = 'block';
+      document.getElementById('customExtraShowO' + customExtraShow).style.display = 'block';
+    }
+    
+    function setupWebsocket() {
+      // Close our previous socket if we're re-initializing
+      if (socket) {
+        unsubscribeSession();
+      }
+      socket = new WebSocket("ws://" + HOST + "ws" + PARAM_ID + sessionId);
+      socket.addEventListener("message", event => {
+        console.log("Received Event over WS", event);
+        
+        if (event && event.data) {
+          try{
+            const parsedData = JSON.parse(event.data);
+            
+            // Determine if we're getting a Momentum or a Goal update
+            if (typeof parsedData.newMomentum === 'number') {
+              setValue(parsedData.isPlayer ? 'playerMomentum' : 'opponentMomentum',
+                      parsedData.newMomentum);
+              
+              // If a Momentum change makes someone the winner, note that
+              // We specifically don't automatically reset the state in case Overtime is desired
+              let confettiType = null;
+              if (parsedData.isPlayer && getNumberValue('playerMomentum') >= getNumberValue('playerGoal')) {
+                statusMessage('Players won the situation');
+                confettiType = 'player';
+              }
+              else if (!parsedData.isPlayer && getNumberValue('opponentMomentum') >= getNumberValue('opponentGoal')) {
+                statusMessageError('Opposition won the situation');
+                confettiType = 'opponent';
+              }
+              
+              // Fire off some confetti for fun
+              if (confettiType &&
+                  window.confetti &&
+                  typeof window.confetti === 'function') {
+                let confettiOptions = { };
+                
+                if (confettiType === 'player') {
+                  confettiOptions = {
+                    spread: randomInRange(40, 100),
+                    particleCount: randomInRange(50, 100),
+                    origin: isMobileSize() ? { x: 0.5, y: 0.25 } : { x: 0.25, y: 0.6 }
+                  };
+                }
+                else {
+                  // Use really anemic confetti for the opposition
+                  confettiOptions = {
+                    spread: randomInRange(70, 110),
+                    particleCount: randomInRange(5, 10),
+                    origin: isMobileSize() ? { x: 0.5, y: 0.7 } : { x: 0.75, y: 0.6 }
+                  };
+                }
+                confettiOptions.scalar = isMobileSize() ? 0.5 : 1;
+                confettiOptions.startVelocity = isMobileSize() ? 20 : randomInRange(30, 45);
+                
+                window.confetti.reset(); // For performance clear old confetti beforehand
+                window.confetti(confettiOptions);
+              }
+            }
+            else if (typeof parsedData.newGoal === 'number') {
+              setValue(parsedData.isPlayer ? 'playerGoal' : 'opponentGoal',
+                      parsedData.newGoal);
+              
+              // Draw attention to the update as it can be easy to miss
+              statusMessage((parsedData.isPlayer ? 'Player' : 'Opposition') +
+                            " goal set to <b>" + parsedData.newGoal + "</b>");
+            }
+            
+            calculateMomentumColors();
+          }catch (err) {
+            console.error("Error receiving WS message", err);
+          }
+        }
+      });
+      socket.addEventListener("error", err => {
+        statusMessageError('Initialization error');
+        console.error("Websocket error", err);
+      });
+      socket.addEventListener("open", event => {
+        // Open a Websocket connection to the server, then subscribe to our Session ID
+        console.log("Opened Websocket, subscribing " + sessionId);
+        socket.send(JSON.stringify({
+          sessionId: sessionId,
+          type: 'subscribe'
+        }));
+      });
+      // Don't do anything on the "close" event, so no point declaring: socket.addEventListener("close", event => { });
+    }
+    
+    function customAmountEnterKey(event, isPlayer) {
+      if (event && event.key && event.key === 'Enter') {
+        changeMomentum(isPlayer, false);
+      }
+    }
+    
+    function goalAmountEnterKey(event, isPlayer) {
+      if (event && event.key && event.key === 'Enter') {
+        changeGoal(isPlayer);
+      }
+    }
+    
+    function changeSessionEnterKey(event) {
+      if (event && event.key && event.key === 'Enter') {
+        changeSession();
+      }
+    }
+    
+    function isMobileSize() {
+      if (document && document.body &&
+        document.body.getBoundingClientRect() &&
+        document.body.getBoundingClientRect().width < 850) {
+          return true;
+      }
+      return false;
+    }
+    
+    function focusInput(id) {
+      const ele = document.getElementById(id);
+      if (ele) {
+        ele.focus();
+        ele.select();
+      }
+    }
+    
+    function unsubscribeSession() {
+      // If we have a Websocket try to unsubscribe from our current session ID and close the socket
+      if (socket) {
+        try{
+          console.log("Closed Websocket, unsubscribing " + sessionId);
+          socket.send(JSON.stringify({
+            sessionId: sessionId,
+            type: 'unsubscribe'
+          }));
+          socket.close();
+        }catch (ignored) { }
+      }
+    }
+    
+    function applySessionId(newSessionId) {
+      sessionId = newSessionId;
+      
+      // Open our socket
+      setupWebsocket();
+      
+      // Mark our session so the user can see at a glance
+      setValue('sessionNote', "ID: " + sessionId);
+      
+      // Append our session ID to the URL
+      if (sessionId) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("id", sessionId);
+        history.pushState({}, "", url);
+      }
+    }
+    
+    function randomInRange(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+    
+    function statusMessageInfo(message) {
+      statusMessage(message, 'info');
+    }
+    
+    function statusMessageError(message) {
+      statusMessage(message, 'error');
+    }
+    
+    function statusMessage(message, type) {
+      if (!message) {
+        return;
+      }
+      if (!type) {
+        type = 'info';
+      }
+      
+      const status = document.getElementById('floatingStatus');
+      if (status) {
+        if (type === 'info') {
+          status.style.backgroundColor = '#008800';
+        }
+        else if (type === 'error') {
+          status.style.backgroundColor = '#880000';
+        }
+        
+        // Dump content into the status and show
+        status.innerHTML = message;
+        status.style.opacity = '1';
+        
+        // Hide automatically after our timer
+        if (statusTimer) {
+          clearTimeout(statusTimer);
+        }
+        statusTimer = setTimeout(() => {
+          status.style.opacity = '0';
+        }, STATUS_SHOW_LENGTH_MS);
+      }
+    }
+    
+    function showSessionDialog() {
+      const dialog = document.getElementById('sessionDialog');
+      if (dialog) {
+        dialog.showModal();
+        
+        setValue('sessionIn', sessionId);
+        focusInput('sessionIn');
+      }
+    }
+    
+    function closeSessionDialog() {
+      const dialog = document.getElementById('sessionDialog');
+      if (dialog) {
+        dialog.close();
+      }
+    }
+    
+    function changeSession() {
+      const desiredId = getValue('sessionIn');
+      closeSessionDialog();
+      
+      // Don't do anything if our session is the same
+      if (sessionId === desiredId) {
+        return;
+      }
+      
+      if (desiredId) {
+        // Do our session setup like Websockets, etc.
+        applySessionId(desiredId);
+        
+        // Try to update our app state for the desired session
+        getAppState().then(res => {
+          if (res) {
+            res.json().then(content => {
+              if (content) {
+                setValue('playerGoal', content.playerGoal);
+                setValue('playerMomentum', content.playerMomentum);
+                setValue('opponentGoal', content.opponentGoal);
+                setValue('opponentMomentum', content.opponentMomentum);
+                calculateMomentumColors();
+                statusMessage("Joined <b>" + sessionId + "</b>");
+              }
+            }).catch(err => {
+              console.error(err);
+              throw new Error("Failed to parse response");
+            });
+          }
+        }).catch(err => {
+          // Note that on failure we just refresh the page - the new ID will be in the URL so we can just try again
+          statusMessageError("Failed to join");
+          console.error("Failed to get app state, going to refresh");
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        });
+      }
+    }
+    
+    function resetMomentum(isPlayer) {
+      changeMomentum(isPlayer, true, 0);
+    }
+    
+    function changeMomentum(isPlayer, isSet, amount) {
+      if (typeof amount === 'undefined') {
+        amount = getNumberValue('customMomentumIn' + (isPlayer ? 'Player' : 'Opponent'));
+        
+        // Don't bother POSTing for an unchanged value of 0
+        if (!isSet && amount === 0) {
+          return;
+        }
+      }
+      
+      // TODO Could do a cool "+4" or similar for Momentum math, floating like a damage number. Or highlight, or shake
+      postMomentumChange({
+        isPlayer: isPlayer ? true : false,
+        isSet: isSet,
+        momentum: amount
+      })
+      .then()
+      .catch(err => console.error("Post error", err))
+      .finally(() => calculateMomentumColors());
+    }
+    
+    function changeGoal(isPlayer) {
+      let amount = getNumberValue(isPlayer ? 'playerGoal' : 'opponentGoal');
+      
+      postGoalChange({
+        isPlayer: isPlayer ? true : false,
+        goal: amount
+      })
+      .then()
+      .catch(err => console.error("Post error", err))
+      .finally(() => calculateMomentumColors());
+    }
+    
+    function calculateMomentumColors() {
+      // Determine what color our Momentum should be
+      // Basically get closer to green as we near the goal, based on our percent complete
+      applyMomentumColor('playerMomentum', 'playerGoal', true);
+      applyMomentumColor('opponentMomentum', 'opponentGoal', false);
+    }
+    
+    function applyMomentumColor(momentumFieldId, momentumGoalId, isPlayer) {
+      let percentComplete = getNumberValue(momentumFieldId) / getNumberValue(momentumGoalId) * 100;
+      
+      // Don't bother coloring beyond 100%
+      if (percentComplete >= 100) {
+        percentComplete = 100;
+      }
+      
+      const toColor = document.getElementById(momentumFieldId);
+      if (toColor) {
+        let newColor = 'white';
+        if (percentComplete <= 0) { newColor = '#FFFFFF'; }
+        else if (percentComplete > 0 && percentComplete < 5) { newColor = '#FF0000'; }
+        else if (percentComplete >= 5 && percentComplete <= 10) { newColor = '#FF3300'; }
+        else if (percentComplete <= 20) { newColor = '#FF6600'; }
+        else if (percentComplete <= 30) { newColor = '#FF9900'; }
+        else if (percentComplete <= 40) { newColor = '#FFCC00'; }
+        else if (percentComplete <= 50) { newColor = '#FFFF00'; }
+        else if (percentComplete <= 60) { newColor = '#DDFF00'; }
+        else if (percentComplete <= 70) { newColor = '#BBFF00'; }
+        else if (percentComplete <= 80) { newColor = '#AAFF00'; }
+        else if (percentComplete <= 90) { newColor = '#99FF00'; }
+        else if (percentComplete <= 95) { newColor = '#44FF00'; }
+        else if (percentComplete <= 100) { newColor = '#00FF00'; }
+        toColor.style.color = newColor;
+      }
+    }
+    
+    function getNumberValue(inputId) {
+      // Same as getting a value, except if we got null, return 0 instead
+      let toReturn = getValue(inputId, true);
+      if (toReturn === null) {
+        return 0;
+      }
+      return toReturn;
+    }
+    
+    function getValue(inputId, tryToParse) {
+      let toReturn = null;
+      
+      const ele = document.getElementById(inputId);
+      if (ele) {
+        toReturn = ele.value;
+        if (!toReturn) {
+          toReturn = ele.innerText;
+        }
+        
+        if (tryToParse && typeof toReturn === 'string') {
+          // Try to parse to a number if possible
+          try {
+            const tryParse = parseInt(toReturn);
+            if (Number.isInteger(tryParse) &&
+                !Number.isNaN(tryParse)) {
+              toReturn = tryParse;
+            }
+          }catch (ignored) { }
+        }
+      }
+      return toReturn;
+    }
+    
+    function setValue(eleId, value) {
+      const ele = document.getElementById(eleId);
+      
+      if (ele) {
+        if (ele.tagName === 'INPUT') {
+          ele.value = value;
+        }
+        else {
+          ele.innerText = value;
+        }
+      }
+    }
+    
+    // API to server
+    async function getAppState() {
+      return await fetch(API_STATE + PARAM_ID + sessionId, {
+        method: "GET",
+        mode: "cors",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+    }
+    
+    // API to server
+    async function postMomentumChange(data) {
+      if (!data) {
+        return;
+      }
+      
+      // Append our sessionId if needed
+      if (!data.sessionId) {
+        data.sessionId = sessionId;
+      }
+      
+      return await fetch(API_MOMENTUM, {
+        method: "POST",
+        mode: "cors",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+    }
+    
+    // API to server
+    async function postGoalChange(data) {
+      if (!data) {
+        return;
+      }
+      
+      // Append our sessionId if needed
+      if (!data.sessionId) {
+        data.sessionId = sessionId;
+      }
+      
+      return await fetch(API_GOAL, {
+        method: "POST",
+        mode: "cors",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+    }
+  </script>
+  
+  <style>
+    :root {
+      --da-blue: #3465A4;
+      --da-darkblue: #1E3A5F;
+      --global-font: "Fira Mono", "DejaVu Sans Mono", "Menlo", "Consolas", "Liberation Mono", "Monaco", "Lucida Console", monospace;
+      --text-color: #CCCCCC;
+    }
+    
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: var(--global-font);
+      font-size: 16px;
+      color: var(--text-color);
+      overflow-x: auto;
+      overflow-y: auto;
+      background: black;
+      display: flex;
+    }
+    
+    input[type="text"],
+    input[type="number"] {
+      font-family: var(--global-font);
+      color: var(--text-color);
+      border: 2px inset var(--text-color);
+      background-image: linear-gradient(var(--da-darkblue), black);
+      padding: 3px;
+    }
+    
+    button {
+      font: inherit;
+      cursor: pointer;
+      display: inline-block;
+      text-align: center;
+      text-decoration: none;
+      margin: 2px 0;
+      padding: 0.5em 1em;
+      border: outset 2px var(--da-blue);
+      border-radius: 4px;
+      color: var(--text-color);
+      background-color: var(--da-darkblue);
+    }
+    
+    button:hover {
+      border-color: white;
+      text-shadow: 0 0 10px white;
+    }
+    
+    a, a:visited {
+      text-decoration: none;
+      color: var(--text-color);
+    }
+    
+    ::backdrop { /* Styling for modal backdrop of built in HTML dialog */
+      backdrop-filter: blur(5px);
+    }
+    
+    .floating-help,
+    .floating-session,
+    .floating-status {
+      cursor: pointer;
+      position: absolute;
+      background-color: var(--da-blue);
+      box-shadow: 0 0 10px white;
+    }
+    
+    .floating-help {
+      top: 5px;
+      right: 5px;
+      padding: 10px 15px;
+      border-radius: 100%;
+      z-index: 10;
+    }
+    
+    .floating-help:hover {
+      filter: brightness(1.2);
+    }
+    
+    .floating-session {
+      bottom: 0;
+      right: 0;
+      padding: 10px;
+      border-top-left-radius: 10px;
+      z-index: 20;
+    }
+    
+    .floating-status {
+      cursor: text;
+      bottom: 0;
+      left: 0;
+      padding: 10px;
+      border-top-right-radius: 10px; 
+      opacity: 0;
+      transition: opacity 0.5s;
+      z-index: 30;
+    }
+    
+    .player-panel, .opponent-panel {
+      flex: 1;
+      padding: 20px;
+    }
+    
+    .player-panel {
+      border-right: 5px solid var(--da-blue);
+      background-color: #212121;
+    }
+    
+    .fit-buttons {
+      display: flex;
+    }
+    
+    .fit-buttons > * {
+      flex: 1;
+      margin-left: 5px;
+      margin-right: 5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .center,
+    .center-contents > * {
+      margin-left: auto;
+      margin-right: auto;
+      text-align: center;
+    }
+    
+    #customExtraShowPtrue,
+    #customExtraShowOtrue {
+      display: none;
+    }
+    
+    #customExtraShowPfalse,
+    #customExtraShowOfalse {
+      display: block;
+    }
+    
+    .header {
+      display: block;
+      font-size: 24px;
+      text-shadow: 0 0 10px var(--da-blue);
+      font-weight: bold;
+      text-align: center;
+    }
+    
+    .inner-header {
+      color: white;
+      font-size: 20px;
+      font-weight: normal;
+      padding-top: 5px;
+    }
+    
+    .goal-input {
+      font-size: 20px;
+      width: 50px;
+      height: 30px;
+    }
+    
+    .goal-button {
+      height: auto;
+      margin: 0;
+      padding: 5px;
+    }
+    
+    #sessionDialog {
+      box-shadow: 5px 5px 10px var(--da-darkblue);
+      border: 5px outset white;
+    }
+    
+    .session-input {
+      display: block;
+      margin-top: 10px;
+      margin-bottom: 10px;
+      padding: 10px !important;
+      font-size: 20px;
+    }
+    
+    .custom-input {
+      padding: 8px !important;
+      max-width: 125px;
+    }
+    
+    .momentum-text {
+      text-align: center;
+      text-shadow: 0 0 20px var(--da-blue);
+      font-size: 45vmin;
+    }
+    
+    .show-on-mobile {
+      display: none;
+    }
+    
+    @media (max-width: 850px) {
+      body {
+        flex-direction: column;
+      }
+      
+      .momentum-text {
+        font-size: 30vmin;
+      }
+      
+      .hide-on-mobile {
+        display: none;
+      }
+      
+      .show-on-mobile {
+        display: inline-block;
+      }
+      
+      .player-panel {
+        border-right: 0;
+        border-bottom: 3px solid var(--da-blue);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <a href="https://horizongamesblog.wordpress.com/distant-adventures/" target="_blank">
+    <div class="floating-help" title="Click to see the rules for the Distant Adventures RPG">
+      ?
+    </div>
+  </a>
+  
+  <dialog id="sessionDialog">
+    <label for="sessionIn">Enter the Session ID you want to join:</label>
+    <div class="center center-contents">
+      <input id="sessionIn" type="text" class="session-input" onkeyup="changeSessionEnterKey(event)"></input>
+      <button onclick="changeSession()">Submit</button>
+    </div>
+  </dialog>
+  <div id="sessionNote" class="floating-session" title="Click to change your Session ID"
+       onclick="showSessionDialog()"></div>
+       
+  <div id="floatingStatus" class="floating-status"></div>
+  
+  <!-- Player side -->
+  <div class="player-panel">
+    <span class="header">
+      Players
+      <div class="inner-header">
+        Goal:
+        <input id="playerGoal" type="number" value="${PLAYER_GOAL}" class="goal-input"
+               onclick="focusInput(this.id)"
+               onkeyup="goalAmountEnterKey(event, true)"
+               onblur="changeGoal(true)"></input>
+        <button onclick="changeGoal(true)" class="show-on-mobile goal-button">💾</button>
+      </div>
+    </span>
+    <div id="playerMomentum" class="momentum-text">
+      ${PLAYER_MOMENTUM}
+    </div>
+    
+    <div class="fit-buttons">
+      <button onclick="changeMomentum(false, false, 2)" style="color: #DD3333;" title="Dud! Give the other group +2 Momentum and lose the current Thing">
+        Dud
+      </button>
+      <button onclick="changeMomentum(true, false, 2)" style="color: #CD7F32;" title='Slight Streak for +2 Momentum: "yes, but..."'>
+        Slight
+      </button>
+      <button onclick="changeMomentum(true, false, 5)" style="color: #C0C0C0;" title='Average Streak for +4 Momentum: "yes"'>
+        Average
+      </button>
+      <button onclick="changeMomentum(true, false, 8)" style="color: #FFD700;" title='Perfect Streak for +8 Momentum: "yes, and great bonus..."'>
+        Perfect
+      </button>
+    </div>
+    
+    <div id="customExtraShowPtrue" class="center">
+      <button onclick="toggleCustomExtra()">
+        🔙
+      </button>
+      <input id="customMomentumInPlayer" type="number"
+             class="custom-input"
+             placeholder="Custom Amount"
+             onkeyup="customAmountEnterKey(event, true)"></input>
+      <button onclick="changeMomentum(true, false); focusInput('customMomentumInPlayer');" style="color: white;" title="Add or subtract the custom Momentum from the current amount">
+        <span class="hide-on-mobile">Apply</span>
+        <span class="show-on-mobile">💾</span>
+      </button>
+      <button onclick="changeMomentum(true, true); focusInput('customMomentumInPlayer');" style="color: white;" title="Set the current Momentum to the custom amount">
+        Set
+      </button>
+      <button onclick="resetMomentum(true);" style="color: black;" title="Reset the current Momentum to 0">
+        Zero
+      </button>
+    </div>
+    <div id="customExtraShowPfalse" class="center">
+      <button onclick="toggleCustomExtra()" title="Show extra options like setting a custom Momentum">
+        ...
+      </button>
+    </div>
+  </div>
+  <!-- Player side end -->
+  
+  <!-- Opponent side start -->
+  <div class="opponent-panel">
+    <span class="header">
+      Opposition
+      <div class="inner-header">
+        Goal:
+        <input id="opponentGoal" type="number" value="${OPPONENT_GOAL}" class="goal-input"
+               onclick="focusInput(this.id)"
+               onkeyup="goalAmountEnterKey(event, false)"
+               onblur="changeGoal(false)"></input>
+        <button onclick="changeGoal(false)" class="show-on-mobile goal-button">💾</button>
+      </div>
+    </span>
+    <div id="opponentMomentum" class="momentum-text">
+      ${OPPONENT_MOMENTUM}
+    </div>
+    
+    <div class="fit-buttons">
+      <button onclick="changeMomentum(true, false, 2)" style="color: #DD3333;" title="Dud! Give the other group +2 Momentum and lose the current Thing">
+        Dud
+      </button>
+      <button onclick="changeMomentum(false, false, 2)" style="color: #CD7F32;" title='Slight Streak for +2 Momentum: "yes, but..."'>
+        Slight
+      </button>
+      <button onclick="changeMomentum(false, false, 5)" style="color: #C0C0C0;" title='Average Streak for +4 Momentum: "yes"'>
+        Average
+      </button>
+      <button onclick="changeMomentum(false, false, 8)" style="color: #FFD700;" title='Perfect Streak for +8 Momentum: "yes, and great bonus..."'>
+        Perfect
+      </button>
+    </div>
+    
+    <div id="customExtraShowOtrue" class="center">
+      <button onclick="toggleCustomExtra()" title="Show extra options like setting a custom Momentum">
+        🔙
+      </button>
+      <input id="customMomentumInOpponent" type="number"
+             class="custom-input"
+             placeholder="Custom Amount"
+             onkeyup="customAmountEnterKey(event, false)"></input>
+      <button onclick="changeMomentum(false, false); focusInput('customMomentumInOpponent');" style="color: white;" title="Add or subtract the custom Momentum from the current amount">
+        <span class="hide-on-mobile">Apply</span>
+        <span class="show-on-mobile">💾</span>
+      </button>
+      <button onclick="changeMomentum(false, true); focusInput('customMomentumInOpponent');" style="color: white;" title="Set the current Momentum to the custom amount">
+        Set
+      </button>
+      <button onclick="resetMomentum(false);" style="color: black;" title="Reset the current Momentum to 0">
+        Zero
+      </button>
+    </div>
+    <div id="customExtraShowOfalse" class="center">
+      <button onclick="toggleCustomExtra()">
+        ...
+      </button>
+    </div>
+  </div>
+  <!-- Opponent side end -->
+</body>
+</html>

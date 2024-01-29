@@ -529,6 +529,11 @@
       text-shadow: 0 0 10px white;
     }
     
+    .secondary-button {
+      background-color: var(--text-color);
+      color: var(--da-darkblue);
+    }
+    
     a, a:visited {
       text-decoration: none;
       color: var(--text-color);
@@ -585,7 +590,7 @@
     
     .player-panel {
       border-right: 5px solid var(--da-blue);
-      background-color: #212121;
+      background-color: #222222;
     }
     
     .fit-buttons {
@@ -710,6 +715,7 @@
     <div class="center center-contents">
       <input id="sessionIn" type="text" class="session-input" onkeyup="changeSessionEnterKey(event)"></input>
       <button onclick="changeSession()">Submit</button>
+      <button onclick="closeSessionDialog()" class="secondary-button">Cancel</button>
     </div>
   </dialog>
   <div id="sessionNote" class="floating-session" title="Click to change your Session ID"

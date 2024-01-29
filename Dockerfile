@@ -7,6 +7,6 @@ COPY server.js .
 COPY main.html .
 RUN bun build server.js --outdir .
 
-ENV NODE_ENV production
+ENV isProduction true
 
 CMD [ "bun", "start" ]

@@ -9,8 +9,8 @@
   <!-- TODO Favicon of compass logo, or just straight SVG link <link rel="icon" href="./assets/favicon/favicon-32.png" sizes="32x32" /> -->
   
   <script type="text/javascript">
-    const HOSTNAME = "localhost";
-    const PORT = "3000";
+    const HOSTNAME = "${HOSTNAME}";
+    const PORT = "${PORT}";
     const HOST = HOSTNAME + ":" + PORT + "/";
     const API_MOMENTUM = "http://" + HOST + "momentum";
     const API_GOAL = "http://" + HOST + "goal";
@@ -440,7 +440,7 @@
         data.sessionId = sessionId;
       }
       
-      return await fetch(API_MOMENTUM, {
+      return await fetch(API_MOMENTUM + PARAM_ID + sessionId, {
         method: "POST",
         mode: "cors",
         headers: {
@@ -461,7 +461,7 @@
         data.sessionId = sessionId;
       }
       
-      return await fetch(API_GOAL, {
+      return await fetch(API_GOAL + PARAM_ID + sessionId, {
         method: "POST",
         mode: "cors",
         headers: {

@@ -14,8 +14,12 @@ const sessions = {
   //   sessionId: { playerMomentum, playerGoal, opponentMomentum, opponentGoal }
 };
 
+const DEFAULT_HOSTNAME = Bun.env.isProduction ? 'https://distant-adventures-app.onrender.com' : 'localhost';
+const DEFAULT_PORT = 3000;
+
 const server = Bun.serve({
-  port: 3000,
+  hostname: DEFAULT_HOSTNAME,
+  port: DEFAULT_PORT,
   async fetch(req, server) {
     // Determine if we have an existing session
     const { searchParams } = new URL(req.url);
@@ -23,7 +27,7 @@ const server = Bun.serve({
     if (searchParams && searchParams.get("id")) {
       if (sessions[searchParams.get("id")]) {
         sessionId = searchParams.get("id");
-        console.log("Existing sessionId=" + sessionId);
+        log("Existing sessionId=" + sessionId);
       }
       // If we don't have a match, maybe the user is refreshing a stale or bookmarked URL
       // So let's give them the benefit of the doubt and try to create their session with the desired ID
@@ -45,9 +49,11 @@ const server = Bun.serve({
         
         // Log how many sessions we have currently
         // TODO Clean up sessions based on WS status? Or time/expiry? Could track a "last active" flag? Or after a certain cap? Or a combination of all of those?
-        console.log("Session count " + Object.keys(sessions).length);
+        log("Session count " + Object.keys(sessions).length);
         
         // Replace our various data points in the page with our current session data
+        toReturn = toReturn.replaceAll('"${HOSTNAME}"', '"' + DEFAULT_HOSTNAME + '"');
+        toReturn = toReturn.replaceAll('"${PORT}"', '"' + DEFAULT_PORT + '"');
         toReturn = toReturn.replaceAll('"${SESSION_ID}"', '"' + sessionId + '"');
         toReturn = toReturn.replaceAll('${PLAYER_GOAL}', sessions[sessionId].playerGoal);
         toReturn = toReturn.replaceAll('${PLAYER_MOMENTUM}', sessions[sessionId].playerMomentum);
@@ -56,7 +62,7 @@ const server = Bun.serve({
         
         return new Response(toReturn, { headers: { 'Content-Length': toReturn.length, 'Content-Type': 'text/html;charset=utf-8' }});
       case '/ws':
-        console.log("Start WS", req.url);
+        log("Start WS", req.url);
         
         if (server.upgrade(req)) {
           return; // Return nothing if successful
@@ -104,7 +110,7 @@ const server = Bun.serve({
 
 async function handleMomentumPost(req) {
   const body = await req.json();
-  console.log("Momentum POST in", body);
+  log("Momentum POST in", body);
   
   // Determine if we have a valid Session ID to work with
   const currentSessionId = body.sessionId;
@@ -124,7 +130,7 @@ async function handleMomentumPost(req) {
     momentum = body.momentum;
   }
   
-  console.log("Momentum POST params sessionId=" + currentSessionId + " isPlayer=" + isPlayer + " isSet=" + isSet + " momentum=" + momentum);
+  log("Momentum POST params sessionId=" + currentSessionId + " isPlayer=" + isPlayer + " isSet=" + isSet + " momentum=" + momentum);
   
   // We're either setting the Momentum or just add/subtract based on the current
   if (isSet) {
@@ -153,7 +159,7 @@ async function handleMomentumPost(req) {
     newMomentum: isPlayer ? currentSession.playerMomentum : currentSession.opponentMomentum
   };
   
-  console.log("Momentum POST out", toSend);
+  log("Momentum POST out", toSend);
   
   server.publish(SOCKET_GROUP + currentSessionId, JSON.stringify(toSend));
   return new Response(toSend);
@@ -161,7 +167,7 @@ async function handleMomentumPost(req) {
 
 async function handleGoalPost(req) {
   const body = await req.json();
-  console.log("Goal POST in", body);
+  log("Goal POST in", body);
   
   // Determine if we have a valid Session ID to work with
   const currentSessionId = body.sessionId;
@@ -183,7 +189,7 @@ async function handleGoalPost(req) {
   // Minimum the goal
   if (goal < 0) { goal = 0; }
   
-  console.log("Goal POST params", currentSessionId, isPlayer, goal);
+  log("Goal POST params", currentSessionId, isPlayer, goal);
   
   if (isPlayer) {
     currentSession.playerGoal = goal;
@@ -197,7 +203,7 @@ async function handleGoalPost(req) {
     newGoal: isPlayer ? currentSession.playerGoal : currentSession.opponentGoal
   };
   
-  console.log("Goal POST out", toSend);
+  log("Goal POST out", toSend);
   
   server.publish(SOCKET_GROUP + currentSessionId, JSON.stringify(toSend));
   return new Response(toSend);
@@ -206,10 +212,10 @@ async function handleGoalPost(req) {
 function makeNewSession(sessionId) {
   if (!sessionId) {
     sessionId = generateSessionId();
-    console.log("Make new sessionId=" + sessionId);
+    log("Make new sessionId=" + sessionId);
   }
   else {
-    console.log("Request non-existent, regenerating for sessionId=" + sessionId);
+    log("Request non-existent, regenerating for sessionId=" + sessionId);
   }
   sessions[sessionId] = {
     playerMomentum: 0,
@@ -232,7 +238,7 @@ function generateSessionId(tryAttempt) {
       tryAttempt = 0;
     }
     else if (tryAttempt > 100) {
-      console.error("Even after 100 tries of regenerating, we made a duplicate session ID. Current session count is " + Object.keys(sessions).length);
+      log("Even after 100 tries of regenerating, we made a duplicate session ID. Current session count is " + Object.keys(sessions).length);
       // In this super duper rare case, just throw in another digit
       return nanoid(5).toUpperCase();
     }
@@ -243,4 +249,8 @@ function generateSessionId(tryAttempt) {
   return newId;
 }
 
-console.log("Bun: Hit me with some Momentum!\n");
+function log(message, ...extra) {
+  console.log(new Date().toLocaleString() + " - " + message, extra && extra.length > 0 ? extra : '');
+}
+
+log("Bun: Hit me with some Momentum!\n");

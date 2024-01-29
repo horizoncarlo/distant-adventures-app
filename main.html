@@ -281,10 +281,10 @@
           if (res) {
             res.json().then(content => {
               if (content) {
-                setValue('playerGoal', typeof content.playerGoal === 'number' ? content.playerGoal : 0);
-                setValue('playerMomentum', typeof content.playerMomentum === 'number' ? content.playerMomentum : 0);
-                setValue('opponentGoal', typeof content.opponentGoal === 'number' ? content.opponentGoal : 0);
-                setValue('opponentMomentum', typeof content.opponentMomentum === 'number' ? content.opponentMomentum : 0);
+                setValue('playerGoal', content.playerGoal);
+                setValue('playerMomentum', content.playerMomentum);
+                setValue('opponentGoal', content.opponentGoal);
+                setValue('opponentMomentum', content.opponentMomentum);
                 calculateMomentumColors();
                 statusMessage("Joined <b>" + sessionId + "</b>");
               }
@@ -741,7 +741,7 @@
       <button onclick="changeMomentum(true, false, 2)" style="color: #CD7F32;" title='Slight Streak for +2 Momentum: "yes, but..."'>
         Slight
       </button>
-      <button onclick="changeMomentum(true, false, 5)" style="color: #C0C0C0;" title='Average Streak for +4 Momentum: "yes"'>
+      <button onclick="changeMomentum(true, false, 4)" style="color: #C0C0C0;" title='Average Streak for +4 Momentum: "yes"'>
         Average
       </button>
       <button onclick="changeMomentum(true, false, 8)" style="color: #FFD700;" title='Perfect Streak for +8 Momentum: "yes, and great bonus..."'>
@@ -800,7 +800,7 @@
       <button onclick="changeMomentum(false, false, 2)" style="color: #CD7F32;" title='Slight Streak for +2 Momentum: "yes, but..."'>
         Slight
       </button>
-      <button onclick="changeMomentum(false, false, 5)" style="color: #C0C0C0;" title='Average Streak for +4 Momentum: "yes"'>
+      <button onclick="changeMomentum(false, false, 4)" style="color: #C0C0C0;" title='Average Streak for +4 Momentum: "yes"'>
         Average
       </button>
       <button onclick="changeMomentum(false, false, 8)" style="color: #FFD700;" title='Perfect Streak for +8 Momentum: "yes, and great bonus..."'>

@@ -88,12 +88,22 @@ const server = Bun.serve({
             else if (parsedContent.type === 'unsubscribe') {
               ws.unsubscribe(SOCKET_GROUP + parsedContent.sessionId);
               
+              // Loose way to keep the session list from getting out of control over time
               // Reduce guest count, and if at or below 0 (...never know) clear the session
-              // If someone has the link and refreshes their browser, it'll be recreated anyway
-              // Just a loose way to keep the session list from getting out of control over time
+              // If someone has the link and refreshes their browser, it'll be recreated anyway (although will lose state)
               sessions[parsedContent.sessionId].guests--;
               if (sessions[parsedContent.sessionId].guests <= 0) {
-                delete sessions[parsedContent.sessionId];
+                // We wait a bit before deleting the session, just in case the lone user was refreshing
+                setTimeout(() => {
+                  try{
+                    // Safely check all our data, a lot can happen in a few seconds haha
+                    if (sessions && parsedContent.sessionId &&
+                        sessions[parsedContent.sessionId] &&
+                        sessions[parsedContent.sessionId].guests <= 0) {
+                      delete sessions[parsedContent.sessionId];
+                    }
+                  }catch (ignored) { }
+                }, 30000);
               }
             }
           }

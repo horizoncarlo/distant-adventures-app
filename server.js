@@ -205,6 +205,8 @@ async function handleGoalPost(req) {
     
     // Minimum the goal
     if (goal < 0) { goal = 0; }
+    // Maximum the goal
+    if (goal > 1000) { goal = 1000; }
     
     log("Goal POST params", currentSessionId, isPlayer, goal);
     

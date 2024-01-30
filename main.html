@@ -6,7 +6,8 @@
   <base href="/" />
   <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
-  <!-- TODO Favicon of compass logo, or just straight SVG link <link rel="icon" href="./assets/favicon/favicon-32.png" sizes="32x32" /> -->
+  <!-- Little gimmicky, but straight SVG unicode emoji for the favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌌</text></svg>">
   
   <script type="text/javascript">
     const HOSTNAME = "${HOSTNAME}";
@@ -45,11 +46,12 @@
       document.getElementById('customExtraShowO' + customExtraShow).style.display = 'block';
     }
     
-    function setupWebsocket() {
+    function setupWebsocket(oldSessionId, newSessionId) {
       // Close our previous socket if we're re-initializing
       if (socket) {
-        unsubscribeSession();
+        unsubscribeSession(oldSessionId);
       }
+      
       socket = new WebSocket((isHttps() ? "wss": "ws") + "://" + HOST + "ws" + PARAM_ID + sessionId);
       socket.addEventListener("message", event => {
         console.log("Received Event over WS", event);
@@ -60,8 +62,16 @@
             
             // Determine if we're getting a Momentum or a Goal update
             if (typeof parsedData.newMomentum === 'number') {
+              const oldValue = parsedData.isPlayer ?
+                getValue('playerMomentum') : getValue('opponentMomentum');
               setValue(parsedData.isPlayer ? 'playerMomentum' : 'opponentMomentum',
-                      parsedData.newMomentum);
+                       parsedData.newMomentum);
+              
+              // Show a floating modifier of Momentum
+              const mod = parsedData.newMomentum - oldValue;
+              if (mod !== 0) {
+                momentumFloatingNumber(mod, parsedData.isPlayer);
+              }
               
               // If a Momentum change makes someone the winner, note that
               // We specifically don't automatically reset the state in case Overtime is desired
@@ -172,13 +182,14 @@
       }
     }
     
-    function unsubscribeSession() {
+    function unsubscribeSession(oldSessionId) {
       // If we have a Websocket try to unsubscribe from our current session ID and close the socket
+      let toUnsub = oldSessionId ? oldSessionId : sessionId;
       if (socket) {
         try{
-          console.log("Closed Websocket, unsubscribing " + sessionId);
+          console.log("Closed Websocket, unsubscribing " + toUnsub);
           socket.send(JSON.stringify({
-            sessionId: sessionId,
+            sessionId: toUnsub,
             type: 'unsubscribe'
           }));
           socket.close();
@@ -187,13 +198,14 @@
     }
     
     function applySessionId(newSessionId) {
+      let oldSessionId = sessionId;
       sessionId = newSessionId;
       
       // Open our socket
-      setupWebsocket();
+      setupWebsocket(oldSessionId, sessionId);
       
       // Mark our session so the user can see at a glance
-      setValue('sessionNote', "ID: " + sessionId);
+      setValue('sessionNote', "Room: " + sessionId);
       
       // Append our session ID to the URL
       if (sessionId) {
@@ -246,6 +258,36 @@
       }
     }
     
+    function momentumFloatingNumber(amount, isPlayer) {
+      const object = isPlayer ?
+        document.getElementById('playerMomentum') :
+        document.getElementById('opponentMomentum');
+      if (!object) {
+        return;
+      }
+      
+      const message = document.createElement('div');
+      message.innerHTML = (amount > 0 ? '+' : '') + amount;
+      message.className = 'message';
+      message.style.setProperty('--start', parseInt(object.getBoundingClientRect().top) + 25 + 'px');
+      if (isMobileSize()) {
+        message.style.left = 'calc(55%)';
+      }
+      else {
+        message.style.left = 'calc(' + (isPlayer ? '27%' : '77%') + ')';
+      }
+      message.style.opacity = 1;
+      document.body.appendChild(message);
+      
+      // Start fading the number and remove after the animation completes
+      setTimeout(function() {
+        message.style.opacity = 0;
+      }, 50);
+      setTimeout(function() {
+        document.body.removeChild(message);
+      }, 3100);
+    }
+    
     function showSessionDialog() {
       const dialog = document.getElementById('sessionDialog');
       if (dialog) {
@@ -264,7 +306,7 @@
     }
     
     function changeSession() {
-      const desiredId = getValue('sessionIn');
+      const desiredId = getValue('sessionIn').toUpperCase(); // Uppercase for simplicity
       closeSessionDialog();
       
       // Don't do anything if our session is the same
@@ -318,14 +360,13 @@
         }
       }
       
-      // TODO Could do a cool "+4" or similar for Momentum math, floating like a damage number. Or highlight, or shake
       postMomentumChange({
         isPlayer: isPlayer ? true : false,
         isSet: isSet,
         momentum: amount
       })
       .then()
-      .catch(err => console.error("Post error", err))
+      .catch(err => console.error("Momentum POST error", err))
       .finally(() => calculateMomentumColors());
     }
     
@@ -337,7 +378,7 @@
         goal: amount
       })
       .then()
-      .catch(err => console.error("Post error", err))
+      .catch(err => console.error("Goal POST error", err))
       .finally(() => calculateMomentumColors());
     }
     
@@ -543,11 +584,35 @@
       backdrop-filter: blur(5px);
     }
     
+    .message {
+      position: absolute;
+      animation-name: messageUp;
+      animation-timing-function: linear;
+      animation-duration: 3s;
+      transition: opacity 3s;
+      opacity: 1;
+      z-index: 50;
+      font-size: 8vmin;
+      font-weight: bold;
+      color: var(--da-blue);
+      text-shadow: -1px 0 white, 0 1px white, 1px 0 white, 0 -1px white;
+    }
+
+    @keyframes messageUp {
+      from {
+        top: var(--start);
+      }
+      
+      to {
+        transform: translate(0, -300px);
+      }
+    }
+    
     .floating-help,
     .floating-session,
     .floating-status {
       cursor: pointer;
-      position: absolute;
+      position: fixed;
       background-color: var(--da-blue);
       box-shadow: 0 0 10px white;
     }
@@ -560,6 +625,7 @@
       z-index: 10;
     }
     
+    .floating-session:hover,
     .floating-help:hover {
       filter: brightness(1.2);
     }
@@ -590,7 +656,7 @@
     
     .player-panel {
       border-right: 5px solid var(--da-blue);
-      background-color: #222222;
+      background-color: #15191D;
     }
     
     .fit-buttons {
@@ -661,6 +727,7 @@
       margin-bottom: 10px;
       padding: 10px !important;
       font-size: 20px;
+      text-transform: uppercase;
     }
     
     .custom-input {
@@ -671,7 +738,7 @@
     .momentum-text {
       text-align: center;
       text-shadow: 0 0 20px var(--da-blue);
-      font-size: 45vmin;
+      font-size: 35vmin;
     }
     
     .show-on-mobile {
@@ -696,6 +763,7 @@
       }
       
       .player-panel {
+        background-color: #1E232A; /* Slightly brighter for mobile screens */
         border-right: 0;
         border-bottom: 3px solid var(--da-blue);
       }
@@ -711,14 +779,15 @@
   </a>
   
   <dialog id="sessionDialog">
-    <label for="sessionIn">Enter the Session ID you want to join:</label>
+    <label for="sessionIn">Enter the Room you want to join:</label>
     <div class="center center-contents">
-      <input id="sessionIn" type="text" class="session-input" onkeyup="changeSessionEnterKey(event)"></input>
+      <input id="sessionIn" type="text" class="session-input"
+             onkeyup="changeSessionEnterKey(event)"></input>
       <button onclick="changeSession()">Submit</button>
       <button onclick="closeSessionDialog()" class="secondary-button">Cancel</button>
     </div>
   </dialog>
-  <div id="sessionNote" class="floating-session" title="Click to change your Session ID"
+  <div id="sessionNote" class="floating-session" title="Click to change your Room"
        onclick="showSessionDialog()"></div>
        
   <div id="floatingStatus" class="floating-status"></div>

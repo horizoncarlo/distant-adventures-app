@@ -11,14 +11,11 @@ const nanoid=(t=21)=>crypto.getRandomValues(new Uint8Array(t)).reduce(((t,e)=>t+
 
 const sessions = {
   // Will have the format of a generated Session ID, with these properties:
-  //   sessionId: { playerMomentum, playerGoal, opponentMomentum, opponentGoal }
+  //   sessionId: { playerMomentum, playerGoal, opponentMomentum, opponentGoal, guests }
 };
 
 const DEFAULT_HOSTNAME = Bun.env.isProduction ? 'distant-adventures-app.onrender.com' : 'localhost';
 const DEFAULT_PORT = 3000;
-
-log("Environment (isProduction=" + Bun.env.isProduction + ") and host/port: " + DEFAULT_HOSTNAME + " (" + DEFAULT_PORT + ")");
-
 const server = Bun.serve({
   port: DEFAULT_PORT,
   async fetch(req, server) {
@@ -49,7 +46,6 @@ const server = Bun.serve({
         let toReturn = await Bun.file('./main.html').text();
         
         // Log how many sessions we have currently
-        // TODO Clean up sessions based on WS status? Or time/expiry? Could track a "last active" flag? Or after a certain cap? Or a combination of all of those?
         log("Session count " + Object.keys(sessions).length);
         
         // Replace our various data points in the page with our current session data
@@ -63,8 +59,6 @@ const server = Bun.serve({
         
         return new Response(toReturn, { headers: { 'Content-Length': toReturn.length, 'Content-Type': 'text/html;charset=utf-8' }});
       case '/ws':
-        log("Start WS", req.url);
-        
         if (server.upgrade(req)) {
           return; // Return nothing if successful
         }
@@ -79,7 +73,6 @@ const server = Bun.serve({
         return new Response('Not found', { status: 404 });
     }
   },
-  // TODO Determine how long Websockets stay open, and if we need to refresh/reconnect them. Also whether mobile needs a resume/reconnect?
   websocket: {
     message(ws, content) {
       if (content) {
@@ -88,9 +81,20 @@ const server = Bun.serve({
           if (parsedContent.sessionId && parsedContent.type) {
             if (parsedContent.type === 'subscribe') {
               ws.subscribe(SOCKET_GROUP + parsedContent.sessionId);
+              
+              // Maintain our guests count
+              sessions[parsedContent.sessionId].guests++;
             }
             else if (parsedContent.type === 'unsubscribe') {
               ws.unsubscribe(SOCKET_GROUP + parsedContent.sessionId);
+              
+              // Reduce guest count, and if at or below 0 (...never know) clear the session
+              // If someone has the link and refreshes their browser, it'll be recreated anyway
+              // Just a loose way to keep the session list from getting out of control over time
+              sessions[parsedContent.sessionId].guests--;
+              if (sessions[parsedContent.sessionId].guests <= 0) {
+                delete sessions[parsedContent.sessionId];
+              }
             }
           }
         }catch (ignored) { }
@@ -121,6 +125,11 @@ async function handleMomentumPost(req) {
     let momentum = 0;
     if (typeof body.momentum === 'number') {
       momentum = body.momentum;
+      
+      // Cap our Momentum to stop from getting too silly
+      if (momentum > 100) {
+        momentum = 100;
+      }
     }
     
     log("Momentum POST params sessionId=" + currentSessionId + " isPlayer=" + isPlayer + " isSet=" + isSet + " momentum=" + momentum);
@@ -240,7 +249,8 @@ function makeNewSession(sessionId) {
     playerMomentum: 0,
     playerGoal: DEFAULT_GOAL,
     opponentMomentum: 0,
-    opponentGoal: DEFAULT_GOAL
+    opponentGoal: DEFAULT_GOAL,
+    guests: 0
   }
   return sessionId;
 }

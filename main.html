@@ -108,8 +108,6 @@
                 }
                 confettiOptions.scalar = isMobileSize() ? 0.5 : 1;
                 confettiOptions.startVelocity = isMobileSize() ? 20 : randomInRange(30, 45);
-                
-                window.confetti.reset(); // For performance clear old confetti beforehand
                 window.confetti(confettiOptions);
               }
             }
@@ -613,6 +611,7 @@
     .floating-status {
       cursor: pointer;
       position: fixed;
+      opacity: 0.9;
       background-color: var(--da-blue);
       box-shadow: 0 0 10px white;
     }
@@ -634,6 +633,7 @@
       bottom: 0;
       right: 0;
       padding: 10px;
+      line-height: 40px;
       border-top-left-radius: 10px;
       z-index: 20;
     }
@@ -714,7 +714,7 @@
     .goal-button {
       height: auto;
       margin: 0;
-      padding: 5px;
+      font-size: 16px;
     }
     
     #sessionDialog {

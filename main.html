@@ -31,12 +31,12 @@
       calculateMomentumColors();
       
       applySessionId(sessionId);
-    };
+    }
     
     // Before we unload, unsubscribe from our websocket if possible
     window.onbeforeunload = function() {
       unsubscribeSession();
-    };
+    }
     
     function toggleCustomExtra() {
       document.getElementById('customExtraShowP' + customExtraShow).style.display = 'none';
@@ -159,6 +159,19 @@
       }
     }
     
+    /**
+     * Simple function to intercept the form submission from a mobile (like Android) "Go"
+     *  button on their soft keyboard
+     * We will prevent the default event and re-focus to a nearby field
+     */
+    function preventGoButton(event) {
+      event.preventDefault();
+      const refocus = event.srcElement?.querySelector('button');
+      if (refocus) {
+        refocus.focus();
+      }
+    }
+    
     function isHttps() {
       return window.location.protocol === "https:";
     }
@@ -172,11 +185,13 @@
       return false;
     }
     
-    function focusInput(id) {
+    function focusElement(id) {
       const ele = document.getElementById(id);
       if (ele) {
         ele.focus();
-        ele.select();
+        if (ele.select) {
+          ele.select();
+        }
       }
     }
     
@@ -190,7 +205,10 @@
             sessionId: toUnsub,
             type: 'unsubscribe'
           }));
-          socket.close();
+          if (socket.readyState !== WebSocket.CLOSED &&
+              socket.readyState !== WebSocket.CLOSING) {
+            socket.close();
+          }
         }catch (ignored) { }
       }
     }
@@ -292,7 +310,7 @@
         dialog.showModal();
         
         setValue('sessionIn', sessionId);
-        focusInput('sessionIn');
+        focusElement('sessionIn');
       }
     }
     
@@ -538,6 +556,10 @@
       overflow-y: auto;
       background: black;
       display: flex;
+    }
+    
+    form {
+      display: inline-block;
     }
     
     input[type="text"],
@@ -806,11 +828,13 @@
       Players
       <div class="inner-header">
         Goal:
-        <input id="playerGoal" type="number" value="${PLAYER_GOAL}" class="goal-input"
-               onclick="focusInput(this.id)"
-               onkeyup="goalAmountEnterKey(event, true)"
-               onblur="changeGoal(true)"></input>
-        <button onclick="changeGoal(true)" class="show-on-mobile goal-button">💾</button>
+        <form onsubmit="preventGoButton(event)">
+          <input id="playerGoal" type="number" value="${PLAYER_GOAL}" class="goal-input"
+                onclick="focusElement(this.id)"
+                onkeyup="goalAmountEnterKey(event, true)"
+                onblur="changeGoal(true)"></input>
+          <button id="playerGoalSave" onclick="changeGoal(true)" class="show-on-mobile goal-button">💾</button>
+        </form>
       </div>
     </span>
     <div id="playerMomentum" class="momentum-text">
@@ -836,15 +860,17 @@
       <button onclick="toggleCustomExtra()">
         🔙
       </button>
-      <input id="customMomentumInPlayer" type="number"
-             class="custom-input"
-             placeholder="Custom Amount"
-             onkeyup="customAmountEnterKey(event, true)"></input>
-      <button onclick="changeMomentum(true, false); focusInput('customMomentumInPlayer');" style="color: white;" title="Add or subtract the custom Momentum from the current amount">
-        <span class="hide-on-mobile">Apply</span>
-        <span class="show-on-mobile">💾</span>
-      </button>
-      <button onclick="changeMomentum(true, true); focusInput('customMomentumInPlayer');" style="color: white;" title="Set the current Momentum to the custom amount">
+      <form onsubmit="preventGoButton(event)">
+        <input id="customMomentumInPlayer" type="number"
+              class="custom-input"
+              placeholder="Custom Amount"
+              onkeyup="customAmountEnterKey(event, true)"></input>
+        <button onclick="changeMomentum(true, false); focusElement('customMomentumInPlayer');" style="color: white;" title="Add or subtract the custom Momentum from the current amount">
+          <span class="hide-on-mobile">Apply</span>
+          <span class="show-on-mobile">💾</span>
+        </button>
+      </form>
+      <button onclick="changeMomentum(true, true); focusElement('customMomentumInPlayer');" style="color: white;" title="Set the current Momentum to the custom amount">
         Set
       </button>
       <button onclick="resetMomentum(true);" style="color: black;" title="Reset the current Momentum to 0">
@@ -865,11 +891,13 @@
       Opposition
       <div class="inner-header">
         Goal:
-        <input id="opponentGoal" type="number" value="${OPPONENT_GOAL}" class="goal-input"
-               onclick="focusInput(this.id)"
-               onkeyup="goalAmountEnterKey(event, false)"
-               onblur="changeGoal(false)"></input>
-        <button onclick="changeGoal(false)" class="show-on-mobile goal-button">💾</button>
+        <form onsubmit="preventGoButton(event)">
+          <input id="opponentGoal" type="number" value="${OPPONENT_GOAL}" class="goal-input"
+                onclick="focusElement(this.id)"
+                onkeyup="goalAmountEnterKey(event, false)"
+                onblur="changeGoal(false)"></input>
+          <button onclick="changeGoal(false)" class="show-on-mobile goal-button">💾</button>
+        </form>
       </div>
     </span>
     <div id="opponentMomentum" class="momentum-text">
@@ -895,15 +923,17 @@
       <button onclick="toggleCustomExtra()" title="Show extra options like setting a custom Momentum">
         🔙
       </button>
-      <input id="customMomentumInOpponent" type="number"
-             class="custom-input"
-             placeholder="Custom Amount"
-             onkeyup="customAmountEnterKey(event, false)"></input>
-      <button onclick="changeMomentum(false, false); focusInput('customMomentumInOpponent');" style="color: white;" title="Add or subtract the custom Momentum from the current amount">
-        <span class="hide-on-mobile">Apply</span>
-        <span class="show-on-mobile">💾</span>
-      </button>
-      <button onclick="changeMomentum(false, true); focusInput('customMomentumInOpponent');" style="color: white;" title="Set the current Momentum to the custom amount">
+      <form onsubmit="preventGoButton(event)">
+        <input id="customMomentumInOpponent" type="number"
+              class="custom-input"
+              placeholder="Custom Amount"
+              onkeyup="customAmountEnterKey(event, false)"></input>
+        <button onclick="changeMomentum(false, false); focusElement('customMomentumInOpponent');" style="color: white;" title="Add or subtract the custom Momentum from the current amount">
+          <span class="hide-on-mobile">Apply</span>
+          <span class="show-on-mobile">💾</span>
+        </button>
+      </form>
+      <button onclick="changeMomentum(false, true); focusElement('customMomentumInOpponent');" style="color: white;" title="Set the current Momentum to the custom amount">
         Set
       </button>
       <button onclick="resetMomentum(false);" style="color: black;" title="Reset the current Momentum to 0">

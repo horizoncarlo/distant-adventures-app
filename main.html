@@ -13,9 +13,12 @@
     const HOSTNAME = "${HOSTNAME}";
     const PORT = "${PORT}";
     const HOST = HOSTNAME + (isHttps() ? "" : (":" + PORT)) + "/";
-    const API_MOMENTUM = window.location.protocol + "//" + HOST + "momentum";
-    const API_GOAL = window.location.protocol + "//" + HOST + "goal";
-    const API_STATE = window.location.protocol + "//" + HOST + "state";
+    const SERVER_API = window.location.protocol + "//" + HOST;
+    const API_MOMENTUM = SERVER_API + "momentum";
+    const API_GOAL = SERVER_API + "goal";
+    const API_STATE = SERVER_API + "state";
+    const API_PING = SERVER_API + "ping";
+    const DO_SERVER_PING = "${DO_SERVER_PING}";
     const PARAM_ID = "?id=";
     const STATUS_SHOW_LENGTH_MS = 4000;
     
@@ -23,11 +26,14 @@
     let customExtraShow = false; // Show or hide the extra Momentum panels
     let socket; // Declared later as a binding for our Websocket
     let statusTimer;
+    let pingPongInterval;
     
     // Perform steps once the page is initialized
     // Color our Momentum based on how close we are to the goal
     // Mark what our session ID is in the UI, mainly for mobile where seeing the URL can be a hassle
     window.onload = () => {
+      startPingPong();
+      
       calculateMomentumColors();
       
       applySessionId(sessionId);
@@ -35,7 +41,32 @@
     
     // Before we unload, unsubscribe from our websocket if possible
     window.onbeforeunload = function() {
+      stopPingPong();
+      
       unsubscribeSession();
+    }
+    
+    function startPingPong() {
+      if (!DO_SERVER_PING) {
+        return;
+      }
+      
+      // Stop any existing ping-pong
+      stopPingPong();
+      
+      // Every 5 minutes ping the server to stay alive on Render.com hosting
+      pingPongInterval = setInterval(() => this.pingServer, 1000 * 60 * 5);
+    }
+    
+    function stopPingPong() {
+      if (!DO_SERVER_PING) {
+        return;
+      }
+      
+      if (pingPongInterval) {
+        clearInterval(pingPongInterval);
+        pingPongInterval = null;
+      }
     }
     
     function toggleCustomExtra() {
@@ -529,6 +560,13 @@
           "Content-Type": "application/json",
         },
         body: JSON.stringify(data),
+      });
+    }
+    
+    function pingServer() {
+      fetch(API_PING, {
+        method: "GET",
+        mode: "cors",
       });
     }
   </script>

@@ -19,8 +19,14 @@ const DEFAULT_PORT = 3000;
 const server = Bun.serve({
   port: DEFAULT_PORT,
   async fetch(req, server) {
+    // Skip everything if we're just pinging
+    const urlObj = new URL(req.url);
+    if (urlObj.pathname === '/ping') {
+      return handlePingPong(req);
+    }
+    
     // Determine if we have an existing session
-    const { searchParams } = new URL(req.url);
+    const { searchParams } = urlObj;
     let sessionId = null;
     if (searchParams && searchParams.get("id")) {
       if (sessions[searchParams.get("id")]) {
@@ -40,7 +46,7 @@ const server = Bun.serve({
     }
     
     // Handle our incoming request depending on the path
-    switch (new URL(req.url).pathname) {
+    switch (urlObj.pathname) {
       case '/':
         // Read our HTML page file
         let toReturn = await Bun.file('./main.html').text();
@@ -49,6 +55,7 @@ const server = Bun.serve({
         log("Session count " + Object.keys(sessions).length);
         
         // Replace our various data points in the page with our current session data
+        toReturn = toReturn.replaceAll('"${DO_SERVER_PING}"', Bun.env.isProduction);
         toReturn = toReturn.replaceAll('"${HOSTNAME}"', '"' + DEFAULT_HOSTNAME + '"');
         toReturn = toReturn.replaceAll('"${PORT}"', '"' + DEFAULT_PORT + '"');
         toReturn = toReturn.replaceAll('"${SESSION_ID}"', '"' + sessionId + '"');
@@ -70,7 +77,7 @@ const server = Bun.serve({
       case '/state':
         return handleStateGet(req, sessionId);
       default:
-        return new Response('Not found', { status: 404 });
+        return new Response("Not found", { status: 404 });
     }
   },
   websocket: {
@@ -241,12 +248,17 @@ async function handleStateGet(req, sessionId) {
         playerMomentum: workingSession.playerMomentum,
         opponentGoal: workingSession.opponentGoal,
         opponentMomentum: workingSession.opponentMomentum
-      }), { status: 200 });
+      }));
     }
   }catch (err) {
     log("State GET failed", err);
   }
   return new Response(JSON.stringify({}), { status: 404 });
+}
+
+function handlePingPong(req) {
+  // Yes, we're alive
+  return new Response("hey");
 }
 
 function makeNewSession(sessionId) {

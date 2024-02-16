@@ -55,7 +55,7 @@
       stopPingPong();
       
       // Every 5 minutes ping the server to stay alive on Render.com hosting
-      pingPongInterval = setInterval(() => this.pingServer, 1000 * 60 * 5);
+      pingPongInterval = setInterval(() => this.pingServer(), 1000 * 60 * 5);
     }
     
     function stopPingPong() {

@@ -81,6 +81,8 @@ const server = Bun.serve({
     }
   },
   websocket: {
+    idleTimeout: 960, // Maximum allowed by Bun = 16 minutes, as of their v1.1
+    sendPings: true, // Send ping-pong over websocket automatically to keep clients alive
     message(ws, content) {
       if (content) {
         try{
@@ -306,4 +308,4 @@ function log(message, ...extra) {
   console.log(new Date().toLocaleString() + " - " + message, extra && extra.length > 0 ? extra : '');
 }
 
-log("Bun: Hit me with some Momentum!\n");
+log("Bun: Hit me with some Momentum on port " + DEFAULT_PORT + "!\n");

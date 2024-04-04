@@ -21,6 +21,7 @@
     const DO_SERVER_PING = "${DO_SERVER_PING}";
     const PARAM_ID = "?id=";
     const STATUS_SHOW_LENGTH_MS = 4000;
+    const WS_NORMAL_CLOSE_CODE = 1000; // Indicates a Websocket was intentionally and cleanly and not abnormally closed
     
     let sessionId = "${SESSION_ID}"; // Anything with ${} notation is replaced automatically by the server before the page is sent to the user
     let customExtraShow = false; // Show or hide the extra Momentum panels
@@ -169,7 +170,16 @@
           type: 'subscribe'
         }));
       });
-      // Don't do anything on the "close" event, so no point declaring: socket.addEventListener("close", event => { });
+      socket.addEventListener("close", event => {
+        // If our closure code wasn't normal, try to reconnect
+        if (event && event.code !== WS_NORMAL_CLOSE_CODE) {
+          console.error("Abnormal websocket closure [" + event.code + "], going to reconnect...");
+          setTimeout(() => {
+            socket = null;
+            setupWebsocket(oldSessionId, sessionId);
+          });
+        }
+      });
     }
     
     function customAmountEnterKey(event, isPlayer) {
@@ -238,7 +248,7 @@
           }));
           if (socket.readyState !== WebSocket.CLOSED &&
               socket.readyState !== WebSocket.CLOSING) {
-            socket.close();
+            socket.close(WS_NORMAL_CLOSE_CODE); // Send a normal code that we closed on purpose
           }
         }catch (ignored) { }
       }

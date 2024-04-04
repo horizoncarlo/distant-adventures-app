@@ -308,4 +308,4 @@ function log(message, ...extra) {
   console.log(new Date().toLocaleString() + " - " + message, extra && extra.length > 0 ? extra : '');
 }
 
-log("Bun: Hit me with some Momentum on port " + DEFAULT_PORT + "!\n");
+log("Bun v" + Bun.version + ": Hit me with some Momentum on port " + DEFAULT_PORT + "!\n");

@@ -18,6 +18,7 @@
     const API_GOAL = SERVER_API + "goal";
     const API_STATE = SERVER_API + "state";
     const API_PING = SERVER_API + "ping";
+    const LS_LAST_SESSION = "lastRoom";
     const DO_SERVER_PING = "${DO_SERVER_PING}";
     const PARAM_ID = "?id=";
     const STATUS_SHOW_LENGTH_MS = 4000;
@@ -28,21 +29,25 @@
     let socket; // Declared later as a binding for our Websocket
     let statusTimer;
     let pingPongInterval;
+    let clockInterval;
+    let lastClockMins = -1;
     
     // Perform steps once the page is initialized
     // Color our Momentum based on how close we are to the goal
     // Mark what our session ID is in the UI, mainly for mobile where seeing the URL can be a hassle
     window.onload = () => {
       startPingPong();
+      startLocalClock();
       
       calculateMomentumColors();
       
-      applySessionId(sessionId);
+      loadPreviousSessionId();
     }
     
     // Before we unload, unsubscribe from our websocket if possible
     window.onbeforeunload = function() {
       stopPingPong();
+      stopLocalClock();
       
       unsubscribeSession();
     }
@@ -67,6 +72,34 @@
       if (pingPongInterval) {
         clearInterval(pingPongInterval);
         pingPongInterval = null;
+      }
+    }
+    
+    function startLocalClock() {
+      function padZeros(val) {
+        return val >= 10 ? val : ('0' + val);
+      }
+      
+      const now = new Date();
+      function updateLocalClock() {
+        now.setTime(Date.now()); // Saves creating a Date object each cycle
+        if (lastClockMins !== now.getMinutes()) { // Wow, much optimize
+          lastClockMins = now.getMinutes();
+          setValue('localClock', now.getHours() + ":" + padZeros(lastClockMins));
+        }
+      }
+      
+      // Do an initial clock initialize, then update on an interval
+      updateLocalClock();
+      clockInterval = setInterval(() => {
+        updateLocalClock();
+      }, 5000);
+    }
+    
+    function stopLocalClock() {
+      if (clockInterval) {
+        clearInterval(clockInterval);
+        clockInterval = null;
       }
     }
     
@@ -254,6 +287,19 @@
       }
     }
     
+    function loadPreviousSessionId() {
+      // Check if we have a remembered session, in which case join that instead of our default
+      // This is primarily for users who manually joined a custom room, and don't want to have
+      //  to do that each time they revisit the app
+      const lastSession = localStorage.getItem(LS_LAST_SESSION);
+      if (lastSession) {
+        changeSession(lastSession);
+      }
+      else {
+        applySessionId(sessionId);
+      }
+    }
+    
     function applySessionId(newSessionId) {
       let oldSessionId = sessionId;
       sessionId = newSessionId;
@@ -362,16 +408,21 @@
       }
     }
     
-    function changeSession() {
-      const desiredId = getValue('sessionIn').toUpperCase(); // Uppercase for simplicity
+    function changeSession(loadingPrevious) {
+      const desiredId = (loadingPrevious ? loadingPrevious : getValue('sessionIn')).toUpperCase(); // Uppercase for simplicity
       closeSessionDialog();
       
-      // Don't do anything if our session is the same
-      if (sessionId === desiredId) {
-        return;
-      }
-      
       if (desiredId) {
+        // Abort if our session is the same
+        if (sessionId === desiredId) {
+          // If we're loading our last session, at least apply our details though
+          if (loadingPrevious) {
+            applySessionId(sessionId);
+          }
+          
+          return;
+        }
+        
         // Do our session setup like Websockets, etc.
         applySessionId(desiredId);
         
@@ -385,12 +436,22 @@
                 setValue('opponentGoal', content.opponentGoal);
                 setValue('opponentMomentum', content.opponentMomentum);
                 calculateMomentumColors();
-                statusMessage("Joined <b>" + sessionId + "</b>");
+                
+                // Only notify if the user intentionally joined a room
+                if (!loadingPrevious) {
+                  statusMessage("Joined <b>" + sessionId + "</b>");
+                }
               }
             }).catch(err => {
               console.error(err);
               throw new Error("Failed to parse response");
             });
+            
+            // If we weren't manually overriding but intentionally changing the room, remember that for the future
+            // We don't need to bother remembering randomly generated session IDs though
+            if (!loadingPrevious) {
+              localStorage.setItem(LS_LAST_SESSION, desiredId);
+            }
           }
         }).catch(err => {
           // Note that on failure we just refresh the page - the new ID will be in the URL so we can just try again
@@ -677,6 +738,7 @@
     }
     
     .floating-help,
+    .floating-clock,
     .floating-session,
     .floating-status {
       cursor: pointer;
@@ -684,6 +746,15 @@
       opacity: 0.9;
       background-color: var(--da-blue);
       box-shadow: 0 0 10px white;
+    }
+    
+    .floating-clock {
+      cursor: default;
+      top: 0;
+      left: 0;
+      border-bottom-right-radius: 10px;
+      padding: 5px;
+      z-index: 15;
     }
     
     .floating-help {
@@ -855,6 +926,8 @@
       ?
     </div>
   </a>
+  
+  <div id="localClock" class="floating-clock"></div>
   
   <dialog id="sessionDialog">
     <label for="sessionIn">Enter the Room you want to join:</label>

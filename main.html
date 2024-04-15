@@ -79,13 +79,19 @@
       function padZeros(val) {
         return val >= 10 ? val : ('0' + val);
       }
+      function clockTo12Hour(val) {
+        if (val > 12) {
+          return val - 12;
+        }
+        return val;
+      }
       
       const now = new Date();
       function updateLocalClock() {
         now.setTime(Date.now()); // Saves creating a Date object each cycle
         if (lastClockMins !== now.getMinutes()) { // Wow, much optimize
           lastClockMins = now.getMinutes();
-          setValue('localClock', now.getHours() + ":" + padZeros(lastClockMins));
+          setValue('localClock', clockTo12Hour(now.getHours()) + ":" + padZeros(lastClockMins));
         }
       }
       

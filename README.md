@@ -10,7 +10,7 @@ For more information on the game you can find the free rules at:
 
 ### Live Demo
 To see the application running visit either (initial startup might be slow due to hosting solution spinning up):
-- **App** http://adventure.homelinux.com/
+- **App** http://distant.us.to/ or
 - **App** https://distant-adventures-app.onrender.com/
 
 ### Setup and Running

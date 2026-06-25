@@ -9,10 +9,22 @@ const DEFAULT_GOAL = 10;
 // Note instead of a custom library we just drop - and _ as options and use "Z" in that case instead
 const nanoid=(t=21)=>crypto.getRandomValues(new Uint8Array(t)).reduce(((t,e)=>t+=(e&=63)<36?e.toString(36):e<62?(e-26).toString(36).toUpperCase():"Z"),"");
 
-const sessions = {
+let sessions = {
   // Will have the format of a generated Session ID, with these properties:
   //   sessionId: { playerMomentum, playerGoal, opponentMomentum, opponentGoal, guests }
 };
+
+// Check every hour, then clear all sessions at midnight each night
+let lastResetDay = new Date().toDateString();
+setInterval(() => {
+  const now = new Date();
+  
+  if (now.getHours() === 0 && now.toDateString() !== lastResetDay) {
+    sessions = {};
+    lastResetDay = now.toDateString();
+    console.log(`${Object.keys(sessions).length} sessions reset at ${now}`);
+  }
+}, 60 * 60 * 1000);
 
 const DEFAULT_HOSTNAME = Bun.env.isProduction ? 'distant.gugs.dev' : 'localhost';
 const DEFAULT_PORT = 3000;
@@ -110,6 +122,7 @@ const server = Bun.serve({
                         sessions[parsedContent.sessionId] &&
                         sessions[parsedContent.sessionId].guests <= 0) {
                       delete sessions[parsedContent.sessionId];
+                      console.log("Delete session, count now " + Object.keys(sessions).length);
                     }
                   }catch (ignored) { }
                 }, 30000);

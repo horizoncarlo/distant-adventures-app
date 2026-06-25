@@ -1,6 +1,6 @@
 {
   "name": "distant-adventures-app",
-  "version": "0.9",
+  "version": "1.0",
   "scripts": {
     "build": "bun build server.js --outdir ./build",
     "start": "bun server.js",

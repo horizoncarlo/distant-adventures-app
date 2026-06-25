@@ -22,7 +22,7 @@ setInterval(() => {
   if (now.getHours() === 0 && now.toDateString() !== lastResetDay) {
     sessions = {};
     lastResetDay = now.toDateString();
-    console.log(`${Object.keys(sessions).length} sessions reset at ${now}`);
+    log(`${Object.keys(sessions).length} sessions reset at ${now}`);
   }
 }, 60 * 60 * 1000);
 
@@ -122,7 +122,7 @@ const server = Bun.serve({
                         sessions[parsedContent.sessionId] &&
                         sessions[parsedContent.sessionId].guests <= 0) {
                       delete sessions[parsedContent.sessionId];
-                      console.log("Delete session, count now " + Object.keys(sessions).length);
+                      log("Delete session, count now " + Object.keys(sessions).length);
                     }
                   }catch (ignored) { }
                 }, 30000);
